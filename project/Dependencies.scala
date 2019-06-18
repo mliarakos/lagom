@@ -5,6 +5,7 @@ package lagom.build
 
 import sbt.Keys._
 import sbt._
+import org.portablescala.sbtplatformdeps.PlatformDepsPlugin.autoImport._
 
 object Dependencies {
 
@@ -24,8 +25,10 @@ object Dependencies {
     val PlayFileWatch    = "1.1.8"
 
     val Akka: String = sys.props.getOrElse("lagom.build.akka.version", "2.5.22")
-    val AkkaHttp     = "10.1.8"
-    val Aeron        = "1.15.1"
+    // Generally s"1.$Akka"
+    val AkkaJs   = "1.2.5.23"
+    val AkkaHttp = "10.1.8"
+    val Aeron    = "1.15.1"
 
     val AkkaPersistenceCassandra = "0.61"
     val AkkaPersistenceJdbc      = "3.5.0"
@@ -81,6 +84,7 @@ object Dependencies {
 
   // Specific libraries that get reused
   private val scalaTest: ModuleID    = ("org.scalatest" %% "scalatest" % Versions.ScalaTest).excludeAll(excludeSlf4j: _*)
+  private val scalaTestJs            = "org.scalatest" %% "scalatest_sjs0.6" % Versions.ScalaTest
   private val guava                  = "com.google.guava" % "guava" % Versions.Guava
   private val scalaJava8Compat       = "org.scala-lang.modules" %% "scala-java8-compat" % Versions.ScalaJava8Compat
   private val scalaXml               = "org.scala-lang.modules" %% "scala-xml" % Versions.ScalaXml
@@ -94,6 +98,7 @@ object Dependencies {
     ("com.datastax.cassandra" % "cassandra-driver-core" % "3.6.0").excludeAll(excludeSlf4j: _*)
 
   private val akkaActor            = "com.typesafe.akka" %% "akka-actor" % Versions.Akka
+  private val akkActorJs           = "org.akka-js" %% "akkajsactor_sjs0.6" % Versions.AkkaJs
   private val akkaRemote           = "com.typesafe.akka" %% "akka-remote" % Versions.Akka
   private val akkaCluster          = "com.typesafe.akka" %% "akka-cluster" % Versions.Akka
   private val akkaClusterSharding  = "com.typesafe.akka" %% "akka-cluster-sharding" % Versions.Akka
@@ -104,6 +109,7 @@ object Dependencies {
   private val akkaPersistenceQuery = "com.typesafe.akka" %% "akka-persistence-query" % Versions.Akka
   private val akkaSlf4j            = ("com.typesafe.akka" %% "akka-slf4j" % Versions.Akka).excludeAll(excludeSlf4j: _*)
   private val akkaStream           = "com.typesafe.akka" %% "akka-stream" % Versions.Akka
+  private val akkaStreamJs         = "org.akka-js" %% "akkajsactorstream_sjs0.6" % Versions.AkkaJs
   private val akkaProtobuf         = "com.typesafe.akka" %% "akka-protobuf" % Versions.Akka
 
   private val akkaManagement                 = "com.lightbend.akka.management" %% "akka-management"                   % Versions.AkkaManagement
@@ -145,9 +151,10 @@ object Dependencies {
   private val playServer = ("com.typesafe.play" %% "play-server" % Versions.Play).excludeAll(excludeSlf4j: _*)
   private val playTest   = ("com.typesafe.play" %% "play-test"   % Versions.Play).excludeAll(excludeSlf4j: _*)
 
-  private val playWs    = ("com.typesafe.play" %% "play-ws"     % Versions.Play).excludeAll(excludeSlf4j: _*)
-  private val playAhcWs = ("com.typesafe.play" %% "play-ahc-ws" % Versions.Play).excludeAll(excludeSlf4j: _*)
-  private val playJson  = ("com.typesafe.play" %% "play-json"   % Versions.PlayJson).excludeAll(excludeSlf4j: _*)
+  private val playWs     = ("com.typesafe.play" %% "play-ws" % Versions.Play).excludeAll(excludeSlf4j: _*)
+  private val playAhcWs  = ("com.typesafe.play" %% "play-ahc-ws" % Versions.Play).excludeAll(excludeSlf4j: _*)
+  private val playJson   = ("com.typesafe.play" %% "play-json" % Versions.PlayJson).excludeAll(excludeSlf4j: _*)
+  private val playJsonJs = "com.typesafe.play" %% "play-json_sjs0.6" % Versions.PlayJson
   private val playFunctional =
     ("com.typesafe.play" %% "play-functional" % Versions.PlayJson).excludeAll(excludeSlf4j: _*)
   private val playFileWatch =
@@ -442,6 +449,11 @@ object Dependencies {
   }
 
   // Dependencies for each module
+  val `play-js` = libraryDependencies ++= Seq(
+    akkActorJs,
+    akkaStreamJs
+  )
+
   val api = libraryDependencies ++= Seq(
     scalaParserCombinators,
     scalaXml,
@@ -453,6 +465,14 @@ object Dependencies {
     // Upgrades needed to match whitelist
     sslConfig,
     playJson
+  )
+
+  val `api-js` = libraryDependencies ++= Seq(
+    "org.scala-lang.modules" %%% "scala-parser-combinators" % "1.1.2",
+    akkActorJs,
+    akkaStreamJs,
+    // Upgrades needed to match whitelist
+    playJsonJs
   )
 
   val `api-javadsl` = libraryDependencies ++= Seq(
@@ -469,6 +489,11 @@ object Dependencies {
     // Upgrades needed to match whitelist
     sslConfig,
     scalaTest % Test
+  )
+
+  val `api-scaladsl-js` = libraryDependencies ++= Seq(
+    scalaTestJs      % Test,
+    "org.scala-lang" % "scala-reflect" % Keys.scalaVersion.value % "compile"
   )
 
   val immutables = libraryDependencies += "org.immutables" % "value" % Versions.Immutables
@@ -533,12 +558,21 @@ object Dependencies {
     "io.netty" % "netty-handler" % Versions.Netty
   )
 
+  val `client-js` = libraryDependencies ++= Seq(
+    "org.scala-js" %%% "scalajs-dom" % "0.9.7",
+    scalaTestJs    % Test
+  )
+
   val `client-javadsl` = libraryDependencies ++= Seq(
     scalaTest % Test
   )
 
   val `client-scaladsl` = libraryDependencies ++= Seq(
     scalaTest % Test
+  )
+
+  val `client-scaladsl-js` = libraryDependencies ++= Seq(
+    scalaTestJs % Test
   )
 
   val `integration-client-javadsl` = libraryDependencies ++= Seq(

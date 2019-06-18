@@ -27,23 +27,23 @@ import akka.NotUsed
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
-import io.netty.handler.codec.http.websocketx.WebSocketVersion
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.lightbend.lagom.internal.client.ClientServiceCallInvoker
+import com.lightbend.lagom.internal.client.HttpResponse
+import com.lightbend.lagom.internal.client.WebSocketVersion
 import com.lightbend.lagom.internal.javadsl.api.JavadslPath
 import com.lightbend.lagom.internal.javadsl.api.MethodServiceCallHolder
 import com.lightbend.lagom.internal.javadsl.api.MethodTopicHolder
 import com.lightbend.lagom.internal.javadsl.api.broker.TopicFactoryProvider
 import play.api.Environment
-import play.api.libs.ws.WSClient
 
 /**
  * Implements a service client.
  */
 @Singleton
 class JavadslServiceClientImplementor @Inject()(
-    ws: WSClient,
+    webClient: JavadslWebClient,
     webSocketClient: JavadslWebSocketClient,
     serviceInfo: ServiceInfo,
     serviceLocator: ServiceLocator,
@@ -72,7 +72,7 @@ class JavadslServiceClientImplementor @Inject()(
           call.serviceCallHolder() match {
             case holder: MethodServiceCallHolder =>
               holder.method -> new JavadslServiceCallInvocationHandler[Any, Any](
-                ws,
+                webClient,
                 webSocketClient,
                 serviceInfo,
                 serviceLocator,
@@ -121,7 +121,7 @@ class JavadslServiceClientImplementor @Inject()(
 }
 
 private class JavadslServiceCallInvocationHandler[Request, Response](
-    ws: WSClient,
+    webClient: JavadslWebClient,
     webSocketClient: JavadslWebSocketClient,
     serviceInfo: ServiceInfo,
     serviceLocator: ServiceLocator,
@@ -136,7 +136,7 @@ private class JavadslServiceCallInvocationHandler[Request, Response](
 
     new JavadslClientServiceCall[Request, Response, Response](
       new JavadslClientServiceCallInvoker[Request, Response](
-        ws,
+        webClient,
         webSocketClient,
         serviceInfo,
         serviceLocator,
@@ -197,7 +197,7 @@ private class JavadslClientServiceCall[Request, ResponseMessage, ServiceCallResp
 }
 
 private class JavadslClientServiceCallInvoker[Request, Response](
-    ws: WSClient,
+    webClient: JavadslWebClient,
     webSocketClient: JavadslWebSocketClient,
     serviceInfo: ServiceInfo,
     override val serviceLocator: ServiceLocator,
@@ -206,8 +206,16 @@ private class JavadslClientServiceCallInvoker[Request, Response](
     path: String,
     queryParams: Map[String, Seq[String]]
 )(implicit ec: ExecutionContext, mat: Materializer)
-    extends ClientServiceCallInvoker[Request, Response](ws, serviceInfo.serviceName(), path, queryParams)
+    extends ClientServiceCallInvoker[Request, Response](serviceInfo.serviceName(), path, queryParams)
     with JavadslServiceApiBridge {
+
+  protected def doMakeStrictCall(
+      method: String,
+      url: String,
+      headers: Map[String, String],
+      body: Option[ByteString]
+  ): Future[HttpResponse] =
+    webClient.request(method, url, headers, body)
 
   protected override def doMakeStreamedCall(
       requestStream: Source[ByteString, NotUsed],

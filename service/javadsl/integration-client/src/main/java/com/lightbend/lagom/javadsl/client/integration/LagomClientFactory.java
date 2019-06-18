@@ -15,6 +15,7 @@ import com.lightbend.lagom.internal.javadsl.api.broker.TopicFactory;
 import com.lightbend.lagom.internal.javadsl.api.broker.TopicFactoryProvider;
 import com.lightbend.lagom.internal.javadsl.client.CircuitBreakersPanelImpl;
 import com.lightbend.lagom.internal.javadsl.client.JavadslServiceClientImplementor;
+import com.lightbend.lagom.internal.javadsl.client.JavadslWebClient;
 import com.lightbend.lagom.internal.javadsl.client.JavadslWebSocketClient;
 import com.lightbend.lagom.internal.javadsl.client.ServiceClientLoader;
 import com.lightbend.lagom.internal.javadsl.registry.JavaServiceRegistryClient;
@@ -72,7 +73,7 @@ public class LagomClientFactory implements Closeable {
   private final Logger log = LoggerFactory.getLogger(LagomClientFactory.class);
 
   private final EventLoopGroup eventLoop;
-  private final WSClient wsClient;
+  private final WebClient webClient;
   private final WebSocketClient webSocketClient;
   private final ActorSystem actorSystem;
   private final CircuitBreakersPanel circuitBreakersPanel;
@@ -81,14 +82,14 @@ public class LagomClientFactory implements Closeable {
 
   private LagomClientFactory(
       EventLoopGroup eventLoop,
-      WSClient wsClient,
+      WebClient webClient,
       WebSocketClient webSocketClient,
       ActorSystem actorSystem,
       CircuitBreakersPanel circuitBreakersPanel,
       Function<ServiceLocator, ServiceClientLoader> serviceClientLoaderCreator,
       boolean managedActorSystem) {
     this.eventLoop = eventLoop;
-    this.wsClient = wsClient;
+    this.webClient = webClient;
     this.webSocketClient = webSocketClient;
     this.actorSystem = actorSystem;
     this.circuitBreakersPanel = circuitBreakersPanel;
@@ -180,7 +181,7 @@ public class LagomClientFactory implements Closeable {
    * connections will leak.
    */
   public void close() {
-    closeGracefully(wsClient::close);
+    closeGracefully(webClient::close);
     closeGracefully(webSocketClient::shutdown);
     closeGracefully(this::coordinatedShutdown);
     closeGracefully(() -> eventLoop.shutdownGracefully(0, 10, TimeUnit.SECONDS));
@@ -213,6 +214,9 @@ public class LagomClientFactory implements Closeable {
             .parse();
 
     WSClient wsClient = AhcWSClient.apply(ahcWSClientConfig, scala.Option.empty(), materializer);
+
+    // WebClient
+    JavadslWebClient webClient = new JavadslWebClient(wsClient, actorSystem.dispatcher());
 
     // WebSocketClient
     WebSocketClientConfig webSocketClientConfig =
@@ -276,7 +280,7 @@ public class LagomClientFactory implements Closeable {
 
           JavadslServiceClientImplementor implementor =
               new JavadslServiceClientImplementor(
-                  wsClient,
+                  webClient,
                   webSocketClient,
                   serviceInfo,
                   serviceLocator,
@@ -291,7 +295,7 @@ public class LagomClientFactory implements Closeable {
 
     return new LagomClientFactory(
         eventLoop,
-        wsClient,
+        webClient,
         webSocketClient,
         actorSystem,
         circuitBreakersPanel,

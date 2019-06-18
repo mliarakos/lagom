@@ -264,7 +264,7 @@ class ScaladslErrorHandlingSpec extends WordSpec with Matchers {
 
         // Custom service client to inject our changeClient callback
         override lazy val serviceClient = new ScaladslServiceClient(
-          wsClient,
+          scaladslWebClient,
           scaladslWebSocketClient,
           serviceInfo,
           serviceLocator,

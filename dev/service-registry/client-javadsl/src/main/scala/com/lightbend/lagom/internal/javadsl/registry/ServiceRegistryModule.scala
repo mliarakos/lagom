@@ -17,6 +17,7 @@ import akka.discovery.ServiceDiscovery
 import akka.stream.Materializer
 import com.lightbend.lagom.internal.javadsl.api.broker.NoTopicFactoryProvider
 import com.lightbend.lagom.internal.javadsl.client.JavadslServiceClientImplementor
+import com.lightbend.lagom.internal.javadsl.client.JavadslWebClient
 import com.lightbend.lagom.internal.javadsl.client.JavadslWebSocketClient
 import com.lightbend.lagom.internal.javadsl.client.ServiceClientLoader
 import com.lightbend.lagom.internal.registry.DevModeServiceDiscovery
@@ -28,7 +29,6 @@ import com.lightbend.lagom.javadsl.jackson.JacksonExceptionSerializer
 import com.lightbend.lagom.javadsl.jackson.JacksonSerializerFactory
 import play.api.inject.Binding
 import play.api.inject.Module
-import play.api.libs.ws.WSClient
 import play.api.Configuration
 import play.api.Environment
 import play.api.Logger
@@ -80,7 +80,7 @@ class ServiceRegistryModule(environment: Environment, configuration: Configurati
 @Singleton
 class ServiceRegistryProvider extends Provider[ServiceRegistry] {
   @Inject private var config: ServiceLocatorConfig            = _
-  @Inject private var ws: WSClient                            = _
+  @Inject private var webClient: JavadslWebClient             = _
   @Inject private var webSocketClient: JavadslWebSocketClient = _
   @Inject private var serviceInfo: ServiceInfo                = _
   @Inject private var environment: Environment                = _
@@ -93,7 +93,7 @@ class ServiceRegistryProvider extends Provider[ServiceRegistry] {
   lazy val get = {
     val serviceLocator = new ClientServiceLocator(config)
     val implementor = new JavadslServiceClientImplementor(
-      ws,
+      webClient,
       webSocketClient,
       serviceInfo,
       serviceLocator,

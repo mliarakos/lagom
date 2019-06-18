@@ -10,6 +10,9 @@ import lagom.Protobuf
 import lagom.build._
 import com.typesafe.tools.mima.core._
 
+import sbtcrossproject.CrossPlugin.autoImport.crossProject
+import sbtcrossproject.CrossPlugin.autoImport.CrossType
+
 // Turn off "Resolving" log messages that clutter build logs
 ivyLoggingLevel in ThisBuild := UpdateLogging.Quiet
 
@@ -311,8 +314,8 @@ val javadslProjects = Seq[Project](
 )
 
 val scaladslProjects = Seq[Project](
-  `api-scaladsl`,
-  `client-scaladsl`,
+  `api-scaladsl`.jvm,
+  `client-scaladsl`.jvm,
   `broker-scaladsl`,
   `kafka-client-scaladsl`,
   `kafka-broker-scaladsl`,
@@ -320,7 +323,7 @@ val scaladslProjects = Seq[Project](
   `akka-management-scaladsl`,
   `akka-discovery-service-locator-scaladsl`,
   `cluster-scaladsl`,
-  `persistence-scaladsl`,
+  `persistence-scaladsl`.jvm,
   `persistence-cassandra-scaladsl`,
   `persistence-jdbc-scaladsl`,
   `pubsub-scaladsl`,
@@ -331,8 +334,8 @@ val scaladslProjects = Seq[Project](
 
 val coreProjects = Seq[Project](
   `api-tools`,
-  api,
-  client,
+  api.jvm,
+  client.jvm,
   server,
   spi,
   `akka-management-core`,
@@ -352,12 +355,22 @@ val coreProjects = Seq[Project](
 val otherProjects = devEnvironmentProjects ++ Seq[Project](
   `integration-tests-javadsl`,
   `integration-tests-scaladsl`,
-  `macro-testkit`
+  `macro-testkit`.jvm
 )
 
 val sbtScriptedProjects = Seq[Project](
   `sbt-scripted-tools`,
   `sbt-scripted-library`
+)
+
+val jsProjects = Seq[Project](
+  `play-js`,
+  api.js,
+  `api-scaladsl`.js,
+  client.js,
+  `client-scaladsl`.js,
+  `macro-testkit`.js,
+  `persistence-scaladsl`.js
 )
 
 lazy val root = (project in file("."))
@@ -376,21 +389,30 @@ lazy val root = (project in file("."))
     UnidocRoot.settings(javadslProjects.map(Project.projectToRef), scaladslProjects.map(Project.projectToRef)): _*
   )
   .aggregate(
-    (javadslProjects ++ scaladslProjects ++ coreProjects ++ otherProjects ++ sbtScriptedProjects)
+    (javadslProjects ++ scaladslProjects ++ coreProjects ++ otherProjects ++ sbtScriptedProjects ++ jsProjects)
       .map(Project.projectToRef): _*
   )
 
 def RuntimeLibPlugins = AutomateHeaderPlugin && Sonatype && PluginsAccessor.exclude(BintrayPlugin) && Unidoc
 def SbtPluginPlugins  = AutomateHeaderPlugin && BintrayPlugin && PluginsAccessor.exclude(Sonatype)
 
-lazy val api = (project in file("service/core/api"))
+lazy val `play-js` = (project in file("compat/play"))
+  .settings(name := "lagom-compat-js-play")
   .settings(runtimeLibCommon: _*)
-  .settings(mimaSettings(since = version150): _*)
-  .enablePlugins(RuntimeLibPlugins)
-  .settings(
-    name := "lagom-api",
-    Dependencies.api
-  )
+  .settings(Dependencies.`play-js`)
+  .enablePlugins(ScalaJSPlugin)
+
+lazy val api = crossProject(JSPlatform, JVMPlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Full)
+  .in(file("service/core/api"))
+  .settings(name := "lagom-api")
+  .settings(runtimeLibCommon: _*)
+  .jsSettings(Dependencies.`api-js`)
+  .jsConfigure(_.dependsOn(`play-js`))
+  .jvmSettings(mimaSettings(since = version150): _*)
+  .jvmSettings(Dependencies.api)
+  .jvmConfigure(_.enablePlugins(RuntimeLibPlugins))
 
 lazy val `api-javadsl` = (project in file("service/javadsl/api"))
   .settings(name := "lagom-javadsl-api")
@@ -400,17 +422,22 @@ lazy val `api-javadsl` = (project in file("service/javadsl/api"))
   .settings(
     Dependencies.`api-javadsl`
   )
-  .dependsOn(api)
+  .dependsOn(api.jvm)
 
-lazy val `api-scaladsl` = (project in file("service/scaladsl/api"))
+lazy val `api-scaladsl` = crossProject(JSPlatform, JVMPlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Full)
+  .in(file("service/scaladsl/api"))
   .settings(name := "lagom-scaladsl-api")
   .settings(runtimeLibCommon: _*)
-  .settings(mimaSettings(since = version150): _*)
-  .enablePlugins(RuntimeLibPlugins)
-  .settings(
+  .jsSettings(Dependencies.`api-scaladsl-js`)
+  .jsConfigure(_.dependsOn(api.js))
+  .jvmSettings(mimaSettings(since = version150): _*)
+  .jvmSettings(
     Dependencies.`api-scaladsl`
   )
-  .dependsOn(api)
+  .jvmConfigure(_.enablePlugins(RuntimeLibPlugins))
+  .jvmConfigure(_.dependsOn(api.jvm))
 
 lazy val immutables = (project in file("immutables"))
   .settings(name := "lagom-javadsl-immutables")
@@ -456,14 +483,17 @@ lazy val `api-tools` = (project in file("api-tools"))
     `server-scaladsl` % Test
   )
 
-lazy val client = (project in file("service/core/client"))
+lazy val client = crossProject(JSPlatform, JVMPlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Full)
+  .in(file("service/core/client"))
+  .settings(name := "lagom-client")
   .settings(runtimeLibCommon: _*)
-  .enablePlugins(RuntimeLibPlugins)
-  .settings(
-    name := "lagom-client",
-    Dependencies.client
-  )
-  .dependsOn(api, spi)
+  .jsSettings(Dependencies.`client-js`)
+  .jsConfigure(_.dependsOn(api.js))
+  .jvmSettings(Dependencies.client)
+  .jvmConfigure(_.enablePlugins(RuntimeLibPlugins))
+  .jvmConfigure(_.dependsOn(api.jvm, spi))
 
 lazy val `client-javadsl` = (project in file("service/javadsl/client"))
   .settings(runtimeLibCommon: _*)
@@ -473,18 +503,23 @@ lazy val `client-javadsl` = (project in file("service/javadsl/client"))
     name := "lagom-javadsl-client",
     Dependencies.`client-javadsl`
   )
-  .dependsOn(client, `api-javadsl`, jackson)
+  .dependsOn(client.jvm, `api-javadsl`, jackson)
 
-lazy val `client-scaladsl` = (project in file("service/scaladsl/client"))
-  .settings(runtimeLibCommon: _*)
-  .settings(mimaSettings(since = version150): _*)
-  .enablePlugins(RuntimeLibPlugins)
+lazy val `client-scaladsl` = crossProject(JSPlatform, JVMPlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Full)
+  .in(file("service/scaladsl/client"))
+  .settings(name := "lagom-scaladsl-client")
   .settings(macroCompileSettings: _*)
-  .settings(
-    name := "lagom-scaladsl-client",
+  .settings(runtimeLibCommon: _*)
+  .jsSettings(Dependencies.`client-scaladsl-js`)
+  .jsConfigure(_.dependsOn(client.js, `api-scaladsl`.js, `macro-testkit`.js % Test))
+  .jvmSettings(mimaSettings(since = version150): _*)
+  .jvmSettings(
     Dependencies.`client-scaladsl`
   )
-  .dependsOn(client, `api-scaladsl`, `macro-testkit` % Test)
+  .jvmConfigure(_.enablePlugins(RuntimeLibPlugins))
+  .jvmConfigure(_.dependsOn(client.jvm, `api-scaladsl`.jvm, `macro-testkit`.jvm % Test))
 
 lazy val `integration-client-javadsl` = (project in file("service/javadsl/integration-client"))
   .settings(
@@ -504,7 +539,7 @@ lazy val server = (project in file("service/core/server"))
   .enablePlugins(RuntimeLibPlugins)
   .settings(runtimeLibCommon: _*)
   .settings(mimaSettings(since = version150): _*)
-  .dependsOn(client)
+  .dependsOn(client.jvm)
 
 lazy val `server-javadsl` = (project in file("service/javadsl/server"))
   .settings(
@@ -526,7 +561,7 @@ lazy val `server-scaladsl` = (project in file("service/scaladsl/server"))
   .enablePlugins(RuntimeLibPlugins)
   .settings(runtimeLibCommon: _*)
   .settings(mimaSettings(since = version150): _*)
-  .dependsOn(`akka-management-scaladsl`, server, `client-scaladsl`, `play-json`)
+  .dependsOn(`akka-management-scaladsl`, server, `client-scaladsl`.jvm, `play-json`)
 
 lazy val `testkit-core` = (project in file("testkit/core"))
   .settings(runtimeLibCommon: _*)
@@ -584,7 +619,7 @@ lazy val `testkit-scaladsl` = (project in file("testkit/scaladsl"))
     `kafka-broker-scaladsl`,
     `dev-mode-ssl-support`, // TODO: remove this when SSLContext provider is promoted to play or ssl-config
     `persistence-core`               % "compile;test->test",
-    `persistence-scaladsl`           % "compile;test->test",
+    `persistence-scaladsl`.jvm       % "compile;test->test",
     `persistence-cassandra-scaladsl` % "compile;test->test",
     `persistence-jdbc-scaladsl`      % Test
   )
@@ -663,7 +698,7 @@ lazy val `akka-discovery-service-locator-javadsl` = (project in file("akka-servi
 
 lazy val `akka-discovery-service-locator-scaladsl` = (project in file("akka-service-locator/scaladsl"))
   .dependsOn(`akka-discovery-service-locator-core`)
-  .dependsOn(`client-scaladsl`)
+  .dependsOn(`client-scaladsl`.jvm)
   .settings(runtimeLibCommon: _*)
   .settings(mimaSettings(since = version151): _*)
   .enablePlugins(RuntimeLibPlugins)
@@ -792,21 +827,28 @@ lazy val `persistence-javadsl` = (project in file("persistence/javadsl"))
   .settings(Protobuf.settings)
   .enablePlugins(RuntimeLibPlugins)
 
-lazy val `persistence-scaladsl` = (project in file("persistence/scaladsl"))
-  .settings(
-    name := "lagom-scaladsl-persistence",
+lazy val `persistence-scaladsl` = crossProject(JSPlatform, JVMPlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Full)
+  .in(file("persistence/scaladsl"))
+  .settings(name := "lagom-scaladsl-persistence")
+  .settings(runtimeLibCommon: _*)
+  .jsSettings(Dependencies.`client-scaladsl-js`)
+  .jsConfigure(_.dependsOn(`api-scaladsl`.js, `macro-testkit`.js % Test))
+  .jvmSettings(mimaSettings(since = version150): _*)
+  .jvmSettings(Protobuf.settings)
+  .jvmSettings(
     Dependencies.`persistence-scaladsl`
   )
-  .dependsOn(
-    `persistence-core` % "compile;test->test",
-    `persistence-testkit`,
-    `play-json`,
-    `cluster-scaladsl`
+  .jvmConfigure(_.enablePlugins(RuntimeLibPlugins))
+  .jvmConfigure(
+    _.dependsOn(
+      `persistence-core` % "compile;test->test",
+      `persistence-testkit`,
+      `play-json`,
+      `cluster-scaladsl`
+    )
   )
-  .settings(runtimeLibCommon: _*)
-  .settings(mimaSettings(since = version150): _*)
-  .settings(Protobuf.settings)
-  .enablePlugins(RuntimeLibPlugins)
 
 lazy val `persistence-cassandra-core` = (project in file("persistence-cassandra/core"))
   .dependsOn(`persistence-core` % "compile;test->test")
@@ -842,9 +884,9 @@ lazy val `persistence-cassandra-scaladsl` = (project in file("persistence-cassan
   )
   .dependsOn(
     `persistence-core`           % "compile;test->test",
-    `persistence-scaladsl`       % "compile;test->test",
+    `persistence-scaladsl`.jvm   % "compile;test->test",
     `persistence-cassandra-core` % "compile;test->test",
-    `api-scaladsl`
+    `api-scaladsl`.jvm
   )
   .settings(runtimeLibCommon: _*)
   .settings(mimaSettings(since = version150): _*)
@@ -888,9 +930,9 @@ lazy val `persistence-jdbc-scaladsl` = (project in file("persistence-jdbc/scalad
     Dependencies.`persistence-jdbc-scaladsl`
   )
   .dependsOn(
-    `persistence-jdbc-core` % "compile;test->test",
-    `persistence-core`      % "compile;test->test",
-    `persistence-scaladsl`  % "compile;test->test"
+    `persistence-jdbc-core`    % "compile;test->test",
+    `persistence-core`         % "compile;test->test",
+    `persistence-scaladsl`.jvm % "compile;test->test"
   )
   .settings(runtimeLibCommon: _*)
   .settings(mimaSettings(since = version150): _*)
@@ -928,7 +970,7 @@ lazy val `broker-scaladsl` = (project in file("service/scaladsl/broker"))
   )
   .settings(runtimeLibCommon: _*)
   .settings(mimaSettings(since = version150): _*)
-  .dependsOn(`api-scaladsl`, `persistence-scaladsl`)
+  .dependsOn(`api-scaladsl`.jvm, `persistence-scaladsl`.jvm)
 
 lazy val `kafka-client` = (project in file("service/core/kafka/client"))
   .enablePlugins(RuntimeLibPlugins)
@@ -938,7 +980,7 @@ lazy val `kafka-client` = (project in file("service/core/kafka/client"))
     name := "lagom-kafka-client",
     Dependencies.`kafka-client`
   )
-  .dependsOn(`api`)
+  .dependsOn(`api`.jvm)
 
 lazy val `kafka-client-javadsl` = (project in file("service/javadsl/kafka/client"))
   .enablePlugins(RuntimeLibPlugins)
@@ -958,7 +1000,7 @@ lazy val `kafka-client-scaladsl` = (project in file("service/scaladsl/kafka/clie
   )
   .settings(runtimeLibCommon: _*)
   .settings(mimaSettings(since = version150): _*)
-  .dependsOn(`api-scaladsl`, `kafka-client`)
+  .dependsOn(`api-scaladsl`.jvm, `kafka-client`)
 
 lazy val `kafka-broker` = (project in file("service/core/kafka/server"))
   .enablePlugins(RuntimeLibPlugins)
@@ -967,7 +1009,7 @@ lazy val `kafka-broker` = (project in file("service/core/kafka/server"))
     Dependencies.`kafka-broker`
   )
   .settings(runtimeLibCommon: _*)
-  .dependsOn(`api`, `persistence-core`, `kafka-client`)
+  .dependsOn(`api`.jvm, `persistence-core`, `kafka-client`)
 
 lazy val `kafka-broker-javadsl` = (project in file("service/javadsl/kafka/server"))
   .enablePlugins(RuntimeLibPlugins)
@@ -1132,12 +1174,12 @@ lazy val `sbt-plugin` = (project in file("dev") / "sbt-plugin")
       val () = (publishLocal in `akka-management-core`).value
       val () = (publishLocal in `akka-management-javadsl`).value
       val () = (publishLocal in `akka-management-scaladsl`).value
-      val () = (publishLocal in `api`).value
+      val () = (publishLocal in `api`.jvm).value
       val () = (publishLocal in `api-javadsl`).value
-      val () = (publishLocal in `api-scaladsl`).value
-      val () = (publishLocal in `client`).value
+      val () = (publishLocal in `api-scaladsl`.jvm).value
+      val () = (publishLocal in `client`.jvm).value
       val () = (publishLocal in `client-javadsl`).value
-      val () = (publishLocal in `client-scaladsl`).value
+      val () = (publishLocal in `client-scaladsl`.jvm).value
       val () = (publishLocal in `cluster-core`).value
       val () = (publishLocal in `cluster-javadsl`).value
       val () = (publishLocal in `immutables`).value
@@ -1465,7 +1507,7 @@ lazy val `devmode-scaladsl` = (project in file("dev") / "service-registry" / "de
   .settings(runtimeLibCommon: _*)
   .settings(mimaSettings(since = version150): _*)
   .enablePlugins(RuntimeLibPlugins)
-  .dependsOn(`client-scaladsl`, `service-registry-client-core`)
+  .dependsOn(`client-scaladsl`.jvm, `service-registry-client-core`)
 
 lazy val `play-integration-javadsl` = (project in file("dev") / "service-registry" / "play-integration-javadsl")
   .settings(
@@ -1505,7 +1547,10 @@ def excludeLog4jFromKafkaServer: Seq[Setting[_]] = Seq(
 )
 
 // Provides macros for testing macros. Is not published.
-lazy val `macro-testkit` = (project in file("macro-testkit"))
+lazy val `macro-testkit` = crossProject(JSPlatform, JVMPlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Pure)
+  .in(file("macro-testkit"))
   .settings(runtimeLibCommon)
   .settings(
     libraryDependencies ++= Seq(

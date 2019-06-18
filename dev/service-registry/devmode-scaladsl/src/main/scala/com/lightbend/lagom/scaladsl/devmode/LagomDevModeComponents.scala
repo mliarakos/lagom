@@ -14,6 +14,7 @@ import com.lightbend.lagom.internal.registry.DevModeServiceDiscovery
 import com.lightbend.lagom.internal.registry.ServiceRegistryClient
 import com.lightbend.lagom.internal.scaladsl.client.ScaladslServiceClient
 import com.lightbend.lagom.internal.scaladsl.client.ScaladslServiceResolver
+import com.lightbend.lagom.internal.scaladsl.client.ScaladslWebClient
 import com.lightbend.lagom.internal.scaladsl.client.ScaladslWebSocketClient
 import com.lightbend.lagom.internal.scaladsl.registry._
 import com.lightbend.lagom.scaladsl.api.Descriptor.Call
@@ -22,7 +23,6 @@ import com.lightbend.lagom.scaladsl.api.ServiceInfo
 import com.lightbend.lagom.scaladsl.api.ServiceLocator
 import com.lightbend.lagom.scaladsl.client.CircuitBreakerComponents
 import play.api.Environment
-import play.api.libs.ws.WSClient
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
@@ -67,7 +67,7 @@ trait LagomDevModeServiceLocatorComponents extends CircuitBreakerComponents {
    * used by a Play application, this will need to be provided manually.
    */
   def serviceInfo: ServiceInfo
-  def wsClient: WSClient
+  def scaladslWebClient: ScaladslWebClient
   def scaladslWebSocketClient: ScaladslWebSocketClient
   def environment: Environment
   def executionContext: ExecutionContext
@@ -98,7 +98,7 @@ trait LagomDevModeServiceLocatorComponents extends CircuitBreakerComponents {
     }
 
     val serviceClient = new ScaladslServiceClient(
-      wsClient,
+      scaladslWebClient,
       scaladslWebSocketClient,
       serviceInfo,
       staticServiceLocator,
